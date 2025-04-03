@@ -2,7 +2,7 @@ import axios from 'axios';
 import { normalizeRole } from './security';
 
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: 'https://outing-backend-hkbt.onrender.com',
   headers: {
     'Content-Type': 'application/json'
   },

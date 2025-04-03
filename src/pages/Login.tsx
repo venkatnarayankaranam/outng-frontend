@@ -33,7 +33,7 @@ const ADMIN_CREDENTIALS = {
 };
 
 // Backend URL
-const backendUrl = "https://outing-backend-hkbt.onrender.com/api";
+const backendUrl = "https://outing-backend-hkbt.onrender.com";
 
 // Floor options
 const FLOOR_OPTIONS = [

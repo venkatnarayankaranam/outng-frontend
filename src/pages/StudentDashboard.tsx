@@ -13,7 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import axiosInstance from '@/lib/axios';
 
 // API base URL
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = "https://outing-backend-hkbt.onrender.com";
 
 const StudentDashboard = () => {
   const { theme } = useTheme();
