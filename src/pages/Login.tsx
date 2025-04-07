@@ -648,7 +648,7 @@ const Login = () => {
           </form>
         )}
 
-        {!isRegistering && (
+        {/* {!isRegistering && (
           <div className={`text-center text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
             <p>Enter your email and password to sign in.</p>
             <p className="mt-2">Admin Users:</p>
@@ -657,7 +657,7 @@ const Login = () => {
             <p>Main Gate: maingate@kietgroup.com / MainGate@2026</p>
             <p>Warden: warden@kietgroup.com / Warden@2026</p>
           </div>
-        )}
+        )} */}
       </Card>
     </div>
   );
