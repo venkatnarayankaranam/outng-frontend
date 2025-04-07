@@ -647,17 +647,6 @@ const Login = () => {
             </div>
           </form>
         )}
-
-        {/* {!isRegistering && (
-          <div className={`text-center text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-            <p>Enter your email and password to sign in.</p>
-            <p className="mt-2">Admin Users:</p>
-            <p className="mt-1">Floor Incharge: floorincharge@kietgroup.com / FloorIncharge@2026</p>
-            <p>Hostel Incharge: hostelincharge@kietgroup.com / HostelIncharge@2026</p>
-            <p>Main Gate: maingate@kietgroup.com / MainGate@2026</p>
-            <p>Warden: warden@kietgroup.com / Warden@2026</p>
-          </div>
-        )} */}
       </Card>
     </div>
   );
