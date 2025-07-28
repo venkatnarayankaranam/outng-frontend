@@ -261,14 +261,21 @@ const WardenDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {dashboardData.requests.map((request: any) => (
-                      <tr key={request._id} className={`border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                        <td className="py-3">{request.studentId?.name}</td>
-                        <td className="py-3">{request.studentId?.hostelBlock}</td>
-                        <td className="py-3">{request.studentId?.floor}</td>
-                        <td className="py-3">{new Date(request.outingDate).toLocaleDateString()}</td>
-                        <td className="py-3">{request.outingTime} - {request.returnTime}</td>
-                        <td className="py-3">{request.purpose}</td>
+                    {dashboardData.requests?.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-gray-500">
+                          No requests found
+                        </td>
+                      </tr>
+                    ) : (
+                      dashboardData.requests?.map((request: any) => (
+                      <tr key={request._id || request.id || 'unknown'} className={`border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <td className="py-3">{request.studentId?.name || 'N/A'}</td>
+                        <td className="py-3">{request.studentId?.hostelBlock || 'N/A'}</td>
+                        <td className="py-3">{request.studentId?.floor || 'N/A'}</td>
+                        <td className="py-3">{request.outingDate ? new Date(request.outingDate).toLocaleDateString() : 'N/A'}</td>
+                        <td className="py-3">{request.outingTime || 'N/A'} - {request.returnTime || 'N/A'}</td>
+                        <td className="py-3">{request.purpose || 'N/A'}</td>
                         <td className="py-3">
                           <span className={`px-2 py-1 rounded-full text-xs ${
                             request.currentLevel === 'warden' ? 'bg-yellow-100 text-yellow-800' :
@@ -279,7 +286,7 @@ const WardenDashboard = () => {
                           </span>
                         </td>
                         <td className="text-right py-3">
-                          {request.currentLevel === 'warden' && request.hostelInchargeApproval === 'approved' && (
+                          {request.currentLevel === 'warden' && (
                             <div className="flex justify-end gap-2">
                               <Button 
                                 variant="outline" 
@@ -292,7 +299,7 @@ const WardenDashboard = () => {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => handleApprove(request._id)} // Use _id instead of id
+                                onClick={() => handleApprove(request._id || request.id)}
                                 className="bg-green-50 hover:bg-green-100 text-green-700"
                               >
                                 Approve
@@ -300,7 +307,7 @@ const WardenDashboard = () => {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => handleDeny(request.id)}
+                                onClick={() => handleDeny(request._id || request.id)}
                                 className="bg-red-50 hover:bg-red-100 text-red-700"
                               >
                                 Deny
@@ -309,7 +316,8 @@ const WardenDashboard = () => {
                           )}
                         </td>
                       </tr>
-                    ))}
+                    ))
+                    )}
                   </tbody>
                 </table>
               </div>

@@ -1,257 +1,497 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { QrCode, ArrowRightFromLine, ArrowLeftToLine, Users } from "lucide-react"; // Removed unused User import
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import QRScanner from "@/components/QRScanner";
-import { QRCodeDisplay } from "@/components/QRCodeDisplay";
-import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import CameraQRScanner from "@/components/CameraQRScanner";
+import { 
+  QrCode, 
+  Users, 
+  LogIn, 
+  LogOut, 
+  Clock, 
+  Search, 
+  Camera,
+  CheckCircle,
+  XCircle,
+  AlertTriangle
+} from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
 import axiosInstance from "@/lib/axios";
-import { ApprovedOuting } from "@/types/outing";
+import { toast } from "react-toastify";
+
+interface Student {
+  _id: string;
+  name: string;
+  rollNumber: string;
+  hostelBlock: string;
+  floor: string;
+  roomNumber: string;
+  phoneNumber: string;
+}
+
+interface GateActivity {
+  id: string;
+  student: Student;
+  type: 'OUT' | 'IN';
+  scannedAt: string;
+  location: string;
+  purpose: string;
+  remarks: string;
+  qrType: string;
+}
+
+interface GateStats {
+  totalOutToday: number;
+  totalInToday: number;
+  currentlyOut: number;
+  pendingReturn: number;
+}
+
+interface QRValidation {
+  qrId: string;
+  type: 'OUTGOING' | 'INCOMING';
+  status: 'valid' | 'expired' | 'time_expired';
+  student: Student;
+  outing: {
+    date: string;
+    outingTime: string;
+    returnTime: string;
+    purpose: string;
+  };
+  validUntil: string;
+  canScan: boolean;
+}
 
 const GateDashboard = () => {
-  const { theme } = useTheme();
-  const { userDetails, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [scannedQRData, setScannedQRData] = useState<any>(null);
-  const [approvedOutings, setApprovedOutings] = useState<ApprovedOuting[]>([]);
-  const [stats, setStats] = useState({
-    totalCheckedIn: 0,
-    totalCheckedOut: 0,
-    pendingReturns: 0
+  const { theme } = useTheme();
+  const [loading, setLoading] = useState(true);
+  const [scanMode, setScanMode] = useState(false);
+  const [cameraMode, setCameraMode] = useState(false);
+  const [qrInput, setQrInput] = useState('');
+  const [qrValidation, setQrValidation] = useState<QRValidation | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [cameraError, setCameraError] = useState<string>('');
+  
+  const [dashboardData, setDashboardData] = useState<{
+    activityLog: GateActivity[];
+    stats: GateStats;
+    lastUpdated: string;
+  }>({
+    activityLog: [],
+    stats: {
+      totalOutToday: 0,
+      totalInToday: 0,
+      currentlyOut: 0,
+      pendingReturn: 0
+    },
+    lastUpdated: ''
   });
 
-  const fetchApprovedOutings = useCallback(async () => {
+  const fetchDashboardData = async () => {
     try {
-      // Add token to request header
-      const token = localStorage.getItem('token');
-      const response = await axiosInstance.get('/outings/gate/approved-outings', {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
+      const response = await axiosInstance.get('/gate/dashboard');
       if (response.data.success) {
-        setApprovedOutings(response.data.outings.map((outing: any) => ({
-          ...outing,
-          outingDate: new Date(outing.outingDate).toLocaleDateString(),
-          verificationStatus: !outing.tracking?.checkOut ? 'not_started' :
-            !outing.tracking?.checkIn ? 'checked_out' : 'completed'
-        })));
-        setStats({
-          totalCheckedIn: response.data.stats.checkedIn || 0,
-          totalCheckedOut: response.data.stats.checkedOut || 0,
-          pendingReturns: response.data.stats.pending || 0
-        });
+        setDashboardData(response.data.data);
       }
     } catch (error: any) {
-      console.error('Error fetching approved outings:', error);
-      if (error.response?.status === 403) {
-        toast.error('Access denied. Please check your permissions.');
-        return;
-      }
+      console.error('Dashboard fetch error:', error);
       if (error.response?.status === 401) {
         navigate('/login');
-        return;
+      } else {
+        toast.error('Failed to fetch dashboard data');
       }
-      toast.error(error.response?.data?.message || 'Failed to fetch approved outings');
+    } finally {
+      setLoading(false);
     }
-  }, [navigate]);
+  };
 
   useEffect(() => {
-    console.log('[GateDashboard] Mounting component:', {
-      isAuthenticated,
-      userDetails,
-      role: userDetails?.role
-    });
-
-    if (!isAuthenticated || (userDetails?.role !== 'security' && userDetails?.role !== 'gate')) {
-      console.log('[GateDashboard] Auth check failed, redirecting to login');
+    const token = localStorage.getItem('token');
+    if (!token) {
       navigate('/login');
       return;
     }
 
-    let intervalId: NodeJS.Timeout | null = null;
-    let mounted = true;
+    fetchDashboardData();
+    const interval = setInterval(fetchDashboardData, 30000); // Refresh every 30 seconds
 
-    const startFetching = () => {
-      fetchApprovedOutings();
-      intervalId = setInterval(() => {
-        if (mounted) fetchApprovedOutings();
-      }, 5000);
-    };
+    return () => clearInterval(interval);
+  }, [navigate]);
 
-    startFetching();
-
-    return () => {
-      console.log('[GateDashboard] Unmounting component');
-      mounted = false;
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isAuthenticated, userDetails?.role, navigate, fetchApprovedOutings]);
-
-  const handleScan = (data: string) => {
+  const validateQR = async (qrData: string) => {
     try {
-      const parsedData = JSON.parse(data);
-      setScannedQRData(parsedData);
-      toast.success("QR code scanned successfully");
-
-      // Verify QR code with backend
-      verifyQRCode(parsedData);
-    } catch (error) {
-      toast.error("Invalid QR code format");
-      console.error("QR scan error:", error);
-    }
-  };
-
-  const verifyQRCode = async (qrData: any) => {
-    try {
-      const response = await axiosInstance.post("/outings/verify-qr", { qrData: JSON.stringify(qrData) }); // Removed /api prefix
-
+      setLoading(true);
+      const response = await axiosInstance.post('/gate/qr/validate', { qrData });
       if (response.data.success) {
-        toast.success(response.data.message);
-      } else {
-        toast.error(response.data.message || "Verification failed");
+        setQrValidation(response.data.data);
+        return response.data.data;
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to verify QR code");
+      toast.error(error.response?.data?.message || 'Invalid QR code');
+      setQrValidation(null);
+      return null;
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleScanError = (err: Error) => {
-    console.error(err);
-    toast.error("Failed to scan QR code");
+  const scanQR = async (qrData: string) => {
+    try {
+      setIsScanning(true);
+      const response = await axiosInstance.post('/gate/scan', { 
+        qrData,
+        location: 'Main Gate' 
+      });
+      
+      if (response.data.success) {
+        const { data } = response.data;
+        toast.success(data.message);
+        
+        // Reset QR input and validation
+        setQrInput('');
+        setQrValidation(null);
+        setScanMode(false);
+        
+        // Refresh dashboard data
+        await fetchDashboardData();
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to scan QR code');
+    } finally {
+      setIsScanning(false);
+    }
   };
 
-  const handleViewDetails = (outing: ApprovedOuting) => {
-    console.log("View details for outing:", outing);
+  const handleQRInputChange = async (value: string) => {
+    setQrInput(value);
+    if (value.trim()) {
+      await validateQR(value.trim());
+    } else {
+      setQrValidation(null);
+    }
   };
 
-  // Return early if not authenticated
-  if (!isAuthenticated || (userDetails?.role !== 'security' && userDetails?.role !== 'gate')) {
-    return null;
+  const handleScanConfirm = () => {
+    if (qrValidation && qrValidation.canScan) {
+      scanQR(qrInput);
+    }
+  };
+
+  const handleCameraScanned = async (qrData: string) => {
+    try {
+      // Validate the scanned QR first
+      const validation = await validateQR(qrData);
+      if (validation && validation.canScan) {
+        // Auto-scan if valid
+        await scanQR(qrData);
+        setCameraMode(false);
+        setScanMode(false);
+      } else {
+        // Show validation result
+        setQrInput(qrData);
+        setCameraMode(false);
+        // scanMode stays true to show validation
+      }
+    } catch (error) {
+      console.error('Camera scan error:', error);
+      setCameraMode(false);
+      toast.error('Failed to process scanned QR code');
+    }
+  };
+
+  const openCamera = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    try {
+      // Request camera permission explicitly
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach(track => track.stop()); // Stop the stream immediately
+      
+      setCameraError('');
+      setCameraMode(true);
+      setScanMode(true);
+    } catch (error) {
+      console.error('Camera permission error:', error);
+      setCameraError('Camera permission denied. Please enable camera access.');
+      toast.error('Camera permission denied. Please enable camera access.');
+    }
+  };
+
+  const handleCameraClose = () => {
+    setCameraMode(false);
+    setCameraError('');
+  };
+
+  const getStatusColor = (type: 'OUT' | 'IN') => {
+    return type === 'OUT' 
+      ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+      : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+  };
+
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-IN');
+  };
+
+  if (loading && !dashboardData.activityLog.length) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-2 text-gray-600">Loading gate dashboard...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
   }
 
   return (
-    <DashboardLayout showScannerButton={true}>
-      <div className="space-y-8">
+    <DashboardLayout>
+      <div className="space-y-6">
+        {/* Header */}
         <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-3xl font-semibold">Gate Dashboard</h2>
-            <p className={`mt-1 ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>
-              Manage student entry and exit
-            </p>
+          <h2 className="text-3xl font-semibold">Gate Dashboard</h2>
+          <div className="flex gap-3">
+            <Button
+              onClick={() => setScanMode(!scanMode)}
+              className={`flex items-center gap-2 ${
+                scanMode ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
+              }`}
+            >
+              {scanMode ? <XCircle className="w-4 h-4" /> : <QrCode className="w-4 h-4" />}
+              {scanMode ? 'Close Scanner' : 'Scan QR Code'}
+            </Button>
           </div>
-          <Button
-            className="premium-button flex items-center space-x-2"
-            onClick={() => setIsScannerOpen(true)}
-          >
-            <QrCode className="w-5 h-5" />
-            <span>Scan QR Code</span>
-          </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className={`p-6 ${theme === "dark" ? "bg-gray-800/90 border-gray-700" : "glass-card"}`}>
-            <div className="flex items-center space-x-4">
-              <div className={`p-3 ${theme === "dark" ? "bg-blue-900/30" : "bg-blue-100"} rounded-full`}>
-                <Users className={`w-6 h-6 ${theme === "dark" ? "text-blue-500" : "text-blue-600"}`} />
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <Card className={`${theme === 'dark' ? 'bg-gray-800/90 border-gray-700' : 'glass-card'}`}>
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
+                  <LogOut className="w-6 h-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Students Out</p>
+                  <p className="text-2xl font-semibold">{dashboardData.stats.totalOutToday}</p>
+                </div>
               </div>
-              <div>
-                <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>Currently Out</p>
-                <p className="text-2xl font-semibold">{stats.totalCheckedOut}</p>
-              </div>
-            </div>
+            </CardContent>
           </Card>
-          <Card className={`p-6 ${theme === "dark" ? "bg-gray-800/90 border-gray-700" : "glass-card"}`}>
-            <div className="flex items-center space-x-4">
-              <div className={`p-3 ${theme === "dark" ? "bg-green-900/30" : "bg-green-100"} rounded-full`}>
-                <ArrowLeftToLine className={`w-6 h-6 ${theme === "dark" ? "text-green-500" : "text-green-600"}`} />
+
+          <Card className={`${theme === 'dark' ? 'bg-gray-800/90 border-gray-700' : 'glass-card'}`}>
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full">
+                  <LogIn className="w-6 h-6 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Students In</p>
+                  <p className="text-2xl font-semibold">{dashboardData.stats.totalInToday}</p>
+                </div>
               </div>
-              <div>
-                <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>Check-Ins Today</p>
-                <p className="text-2xl font-semibold">{stats.totalCheckedIn}</p>
-              </div>
-            </div>
+            </CardContent>
           </Card>
-          <Card className={`p-6 ${theme === "dark" ? "bg-gray-800/90 border-gray-700" : "glass-card"}`}>
-            <div className="flex items-center space-x-4">
-              <div className={`p-3 ${theme === "dark" ? "bg-orange-900/30" : "bg-orange-100"} rounded-full`}>
-                <ArrowRightFromLine className={`w-6 h-6 ${theme === "dark" ? "text-orange-500" : "text-orange-600"}`} />
+
+          <Card className={`${theme === 'dark' ? 'bg-gray-800/90 border-gray-700' : 'glass-card'}`}>
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full">
+                  <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Currently Out</p>
+                  <p className="text-2xl font-semibold">{dashboardData.stats.currentlyOut}</p>
+                </div>
               </div>
-              <div>
-                <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>Pending Returns</p>
-                <p className="text-2xl font-semibold">{stats.pendingReturns}</p>
+            </CardContent>
+          </Card>
+
+          <Card className={`${theme === 'dark' ? 'bg-gray-800/90 border-gray-700' : 'glass-card'}`}>
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-full">
+                  <Clock className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Pending Return</p>
+                  <p className="text-2xl font-semibold">{dashboardData.stats.pendingReturn}</p>
+                </div>
               </div>
-            </div>
+            </CardContent>
           </Card>
         </div>
 
-        <Card className={`${theme === "dark" ? "bg-gray-800/90 border-gray-700" : "glass-card"}`}>
+        {/* QR Scanner */}
+        {scanMode && (
+          <Card className={`${theme === 'dark' ? 'bg-gray-800/90 border-gray-700' : 'glass-card'}`}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <QrCode className="w-5 h-5" />
+                QR Code Scanner
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-3">
+                <Input
+                  placeholder="Paste QR code data here or scan with camera..."
+                  value={qrInput}
+                  onChange={(e) => handleQRInputChange(e.target.value)}
+                  className="flex-1"
+                />
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={(e) => {
+                    console.log('Camera button clicked!');
+                    openCamera(e);
+                  }}
+                >
+                  <Camera className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {qrValidation && (
+                <div className="space-y-3">
+                  <Alert className={`${
+                    qrValidation.canScan 
+                      ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20' 
+                      : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'
+                  }`}>
+                    <AlertDescription>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">
+                            {qrValidation.student.name} ({qrValidation.student.rollNumber})
+                          </span>
+                          <Badge variant={qrValidation.canScan ? "default" : "destructive"}>
+                            {qrValidation.type} - {qrValidation.status.toUpperCase()}
+                          </Badge>
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          <p>Hostel: {qrValidation.student.hostelBlock} - Room {qrValidation.student.roomNumber}</p>
+                          <p>Purpose: {qrValidation.outing.purpose}</p>
+                          <p>Time: {qrValidation.outing.outingTime} - {qrValidation.outing.returnTime}</p>
+                          {qrValidation.validUntil && (
+                            <p>Valid Until: {formatDate(qrValidation.validUntil)} {formatTime(qrValidation.validUntil)}</p>
+                          )}
+                        </div>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+
+                  {qrValidation.canScan && (
+                    <Button 
+                      onClick={handleScanConfirm}
+                      disabled={isScanning}
+                      className="w-full bg-green-600 hover:bg-green-700"
+                    >
+                      {isScanning ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Confirm {qrValidation.type === 'OUTGOING' ? 'Exit' : 'Entry'}
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Activity Log */}
+        <Card className={`${theme === 'dark' ? 'bg-gray-800/90 border-gray-700' : 'glass-card'}`}>
           <CardHeader>
-            <CardTitle>Approved Outing Records</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              <span>Today's Gate Activity</span>
+              <Badge variant="outline">
+                Last Updated: {dashboardData.lastUpdated && formatTime(dashboardData.lastUpdated)}
+              </Badge>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className={`border-b ${theme === "dark" ? "border-gray-700" : "border-gray-200"}`}>
+                  <tr className={`border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                    <th className="text-left py-3">Time</th>
                     <th className="text-left py-3">Student</th>
-                    <th className="text-left py-3">Roll No.</th>
-                    <th className="text-left py-3">Block & Room</th>
-                    <th className="text-left py-3">Out Date & Time</th>
-                    <th className="text-left py-3">Return Time</th>
-                    <th className="text-left py-3">Contact</th>
-                    <th className="text-left py-3">Status</th>
-                    <th className="text-right py-3">Action</th>
+                    <th className="text-left py-3">Roll Number</th>
+                    <th className="text-left py-3">Hostel</th>
+                    <th className="text-left py-3">Action</th>
+                    <th className="text-left py-3">Purpose</th>
+                    <th className="text-left py-3">Location</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {approvedOutings.map((outing) => (
-                    <tr key={outing.id} className={`border-b ${theme === "dark" ? "border-gray-700" : "border-gray-200"}`}>
-                      <td className="py-3">{outing.studentName}</td>
-                      <td className="py-3">{outing.rollNumber}</td>
-                      <td className="py-3">{`${outing.hostelBlock} - ${outing.roomNumber}`}</td>
-                      <td className="py-3">{`${outing.outingDate} ${outing.outingTime}`}</td>
-                      <td className="py-3">{outing.returnTime}</td>
-                      <td className="py-3">
-                        <div className="text-sm">
-                          <div>Student: {outing.phoneNumber}</div>
-                          <div>Parent: {outing.parentPhoneNumber}</div>
-                        </div>
-                      </td>
-                      <td className="py-3">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          outing.verificationStatus === 'completed' 
-                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                            : outing.verificationStatus === 'checked_out'
-                            ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
-                            : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                        }`}>
-                          {outing.verificationStatus === 'completed' 
-                            ? 'Returned'
-                            : outing.verificationStatus === 'checked_out'
-                            ? 'Out'
-                            : 'Not Started'}
-                        </span>
-                      </td>
-                      <td className="py-3 text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleViewDetails(outing)}
-                          className={theme === "dark" ? "border-gray-700 hover:bg-gray-700" : ""}
-                        >
-                          Details
-                        </Button>
+                  {dashboardData.activityLog.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-gray-500">
+                        No activity recorded today
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    dashboardData.activityLog.map((activity) => (
+                      <tr key={activity.id} className={`border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <td className="py-3 font-mono text-sm">
+                          {formatTime(activity.scannedAt)}
+                        </td>
+                        <td className="py-3 font-medium">
+                          {activity.student?.name || 'N/A'}
+                        </td>
+                        <td className="py-3">
+                          {activity.student?.rollNumber || 'N/A'}
+                        </td>
+                        <td className="py-3">
+                          {activity.student?.hostelBlock || 'N/A'} - {activity.student?.roomNumber || 'N/A'}
+                        </td>
+                        <td className="py-3">
+                          <Badge className={getStatusColor(activity.type)}>
+                            {activity.type === 'OUT' ? (
+                              <>
+                                <LogOut className="w-3 h-3 mr-1" />
+                                EXIT
+                              </>
+                            ) : (
+                              <>
+                                <LogIn className="w-3 h-3 mr-1" />
+                                ENTRY
+                              </>
+                            )}
+                          </Badge>
+                        </td>
+                        <td className="py-3 text-sm">
+                          {activity.purpose || 'N/A'}
+                        </td>
+                        <td className="py-3 text-sm">
+                          {activity.location || 'Main Gate'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -259,35 +499,12 @@ const GateDashboard = () => {
         </Card>
       </div>
 
-      <Dialog open={isScannerOpen} onOpenChange={setIsScannerOpen}>
-        <DialogContent className={`sm:max-w-[425px] ${theme === "dark" ? "bg-gray-800 border-gray-700 text-white" : ""}`}>
-          <DialogHeader>
-            <DialogTitle>Scan QR Code</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {!scannedQRData ? (
-              <div className="border rounded-lg overflow-hidden">
-                <QRScanner onScan={handleScan} onError={handleScanError} />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <QRCodeDisplay qrData={scannedQRData} />
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setScannedQRData(null);
-                    }}
-                  >
-                    Scan Another
-                  </Button>
-                  <Button onClick={() => setIsScannerOpen(false)}>Close</Button>
-                </div>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Camera QR Scanner */}
+      <CameraQRScanner
+        isVisible={cameraMode}
+        onScan={handleCameraScanned}
+        onClose={handleCameraClose}
+      />
     </DashboardLayout>
   );
 };

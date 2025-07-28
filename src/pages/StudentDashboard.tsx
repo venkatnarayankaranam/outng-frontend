@@ -11,9 +11,8 @@ import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import axiosInstance from '@/lib/axios';
-
-// API base URL
-const API_BASE_URL = "https://outing-backend-hkbt.onrender.com";
+import { OutingRequestCard } from '@/components/OutingRequestCard';
+import type { OutingRequest } from '@/types';
 
 const StudentDashboard = () => {
   const { theme } = useTheme();
@@ -25,7 +24,7 @@ const StudentDashboard = () => {
   const [purpose, setPurpose] = useState("");
   const [parentContact, setParentContact] = useState(userDetails?.parentPhoneNumber || "");
   
-  const [requests, setRequests] = useState([]);
+  const [requests, setRequests] = useState<OutingRequest[]>([]);
   const [stats, setStats] = useState({
     pending: 0,
     approved: 0,
@@ -38,7 +37,17 @@ const StudentDashboard = () => {
       try {
         const response = await axiosInstance.get('/dashboard/student/requests');
         if (response.data.success) {
-          setRequests(response.data.requests);
+          // Map backend response to frontend types
+          const mappedRequests = response.data.requests.map((req: any) => ({
+            ...req,
+            floorInchargeApproval: req.approvalStatus ? 
+              (req.approvalStatus.floorIncharge === 'approved' ? 'approved' : 'pending') : 'pending',
+            hostelInchargeApproval: req.approvalStatus ? 
+              (req.approvalStatus.hostelIncharge === 'approved' ? 'approved' : 'pending') : 'pending',
+            wardenApproval: req.approvalStatus ? 
+              (req.approvalStatus.warden === 'approved' ? 'approved' : 'pending') : 'pending'
+          }));
+          setRequests(mappedRequests);
           setStats(response.data.stats);
         }
       } catch (error: any) {
@@ -96,6 +105,18 @@ const StudentDashboard = () => {
     setInTime("");
     setPurpose("");
     setParentContact(userDetails?.parentPhoneNumber || "");
+  };
+
+  const getOverallStatus = (request: OutingRequest) => {
+    if (request.status === 'denied') return 'Denied';
+    if (
+      request.floorInchargeApproval === 'approved' &&
+      request.hostelInchargeApproval === 'approved' &&
+      request.wardenApproval === 'approved'
+    ) {
+      return 'Approved';
+    }
+    return 'Pending';
   };
 
   return (
@@ -164,29 +185,16 @@ const StudentDashboard = () => {
             <CardContent>
               <div className="space-y-4">
                 {requests.length > 0 ? (
-                  requests.map((request: any) => (
-                    <div 
-                      key={request.id} 
-                      className={`p-4 rounded-lg border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}
-                    >
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <div className="flex items-center space-x-3">
-                            <span className={`status-badge status-${request.status}`}>
-                              {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
-                            </span>
-                            <h4 className="font-medium">{request.purpose}</h4>
-                          </div>
-                          <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
-                            {request.date} • {request.outTime} - {request.inTime}
-                          </p>
-                        </div>
-                        <Button variant={theme === 'dark' ? "outline" : "outline"} className={theme === 'dark' ? 'border-gray-700 hover:bg-gray-700' : ''}>
-                          View
-                        </Button>
-                      </div>
-                    </div>
-                  ))
+                  <div className="space-y-4">
+                    {requests.map((request) => (
+                      <OutingRequestCard
+                        key={request.id}
+                        request={request}
+                        showApprovalStages={true}
+                        isStudent={true}
+                      />
+                    ))}
+                  </div>
                 ) : (
                   <div className="text-center py-6">
                     <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>

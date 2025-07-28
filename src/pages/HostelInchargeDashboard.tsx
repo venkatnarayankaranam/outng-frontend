@@ -2,7 +2,11 @@ import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Clock, CheckCircle, XCircle, Building, PieChart, Activity, Download } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Clock, CheckCircle, XCircle, Building, PieChart, Activity, Download, UserPlus } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, Legend, Tooltip } from "recharts";
 import axiosInstance from "@/lib/axios";  // Update import path
@@ -92,7 +96,7 @@ const getInitialStatusData = () => [
 
 const getStatusBadgeColor = (request: OutingRequest) => {
   if (request.currentLevel === 'hostel-incharge') {
-    return request.floorInchargeApproval === 'approved' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800';
+    return (request.floorInchargeApproval === 'approved') ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800';
   }
   return request.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
 };
@@ -104,7 +108,7 @@ const getStatusText = (request: OutingRequest) => {
     }
     return 'Pending Floor Incharge Approval';
   }
-  return request.status.charAt(0).toUpperCase() + request.status.slice(1);
+  return request.status ? request.status.charAt(0).toUpperCase() + request.status.slice(1) : 'Unknown';
 };
 
 const HostelInchargeDashboard = () => {
@@ -126,6 +130,18 @@ const HostelInchargeDashboard = () => {
   const [pendingRequests, setPendingRequests] = useState<OutingRequest[]>([]);
   const [approvedStudents, setApprovedStudents] = useState([]);
   const [isApprovedModalOpen, setIsApprovedModalOpen] = useState(false);
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [registrationForm, setRegistrationForm] = useState({
+    name: '',
+    email: '',
+    rollNumber: '',
+    hostelBlock: '',
+    floor: '',
+    roomNumber: '',
+    phoneNumber: '',
+    parentPhoneNumber: '',
+    password: ''
+  });
 
   const fetchDashboardData = async () => {
     try {
@@ -146,13 +162,13 @@ const HostelInchargeDashboard = () => {
           stats: {
             ...stats,
             totalRequests: stats.pending + stats.approved + stats.denied,
-            floorInchargeApproved: requests.filter(r => r.floorInchargeApproval === 'approved').length
+            floorInchargeApproved: requests.filter(r => r?.floorInchargeApproval === 'approved').length
           }
         });
 
         const pendingRequests = requests.filter(r => 
-          r.currentLevel === 'hostel-incharge' && 
-          r.floorInchargeApproval === 'approved'
+          r?.currentLevel === 'hostel-incharge' && 
+          r?.floorInchargeApproval === 'approved'
         );
 
         setPendingRequests(pendingRequests);
@@ -344,6 +360,58 @@ const HostelInchargeDashboard = () => {
     }
   };
 
+  const handleRegisterStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      // Validate required fields
+      const requiredFields = ['name', 'email', 'rollNumber', 'hostelBlock', 'floor', 'roomNumber', 'phoneNumber', 'parentPhoneNumber'];
+      const missingFields = requiredFields.filter(field => !registrationForm[field as keyof typeof registrationForm]);
+      
+      if (missingFields.length > 0) {
+        toast.error(`Please fill in all required fields: ${missingFields.join(', ')}`);
+        return;
+      }
+
+      // Generate default password if not provided
+      const password = registrationForm.password || `${registrationForm.rollNumber}@kiet`;
+
+      const registrationData = {
+        ...registrationForm,
+        password,
+        role: 'student'
+      };
+
+      const response = await axiosInstance.post('/auth/register', registrationData);
+
+      if (response.data.success) {
+        toast.success('Student registered successfully!');
+        setIsRegisterModalOpen(false);
+        setRegistrationForm({
+          name: '',
+          email: '',
+          rollNumber: '',
+          hostelBlock: '',
+          floor: '',
+          roomNumber: '',
+          phoneNumber: '',
+          parentPhoneNumber: '',
+          password: ''
+        });
+      }
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      toast.error(error.response?.data?.message || 'Failed to register student');
+    }
+  };
+
+  const handleInputChange = (field: keyof typeof registrationForm, value: string) => {
+    setRegistrationForm(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -361,13 +429,160 @@ const HostelInchargeDashboard = () => {
       <div className="space-y-8">
         <div className="flex justify-between items-center">
           <h2 className="text-3xl font-semibold">Hostel Incharge Dashboard</h2>
-          <Button
-            onClick={handleDownloadPDF}
-            className="flex items-center gap-2"
-          >
-            <Download className="w-4 h-4" />
-            Download Report
-          </Button>
+          <div className="flex gap-3">
+            <Dialog open={isRegisterModalOpen} onOpenChange={setIsRegisterModalOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="flex items-center gap-2"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Register Student
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Register New Student</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleRegisterStudent} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="name">Full Name *</Label>
+                      <Input
+                        id="name"
+                        value={registrationForm.name}
+                        onChange={(e) => handleInputChange('name', e.target.value)}
+                        placeholder="Student name"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="rollNumber">Roll Number *</Label>
+                      <Input
+                        id="rollNumber"
+                        value={registrationForm.rollNumber}
+                        onChange={(e) => handleInputChange('rollNumber', e.target.value)}
+                        placeholder="e.g., 2200320100XXX"
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="email">Email *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={registrationForm.email}
+                      onChange={(e) => handleInputChange('email', e.target.value)}
+                      placeholder="student@kietgroup.com"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <Label htmlFor="hostelBlock">Hostel Block *</Label>
+                      <Select onValueChange={(value) => handleInputChange('hostelBlock', value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Block" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="A">Block A</SelectItem>
+                          <SelectItem value="B">Block B</SelectItem>
+                          <SelectItem value="C">Block C</SelectItem>
+                          <SelectItem value="D">Block D</SelectItem>
+                          <SelectItem value="E">Block E</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="floor">Floor *</Label>
+                      <Select onValueChange={(value) => handleInputChange('floor', value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Floor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1st Floor</SelectItem>
+                          <SelectItem value="2">2nd Floor</SelectItem>
+                          <SelectItem value="3">3rd Floor</SelectItem>
+                          <SelectItem value="4">4th Floor</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="roomNumber">Room *</Label>
+                      <Input
+                        id="roomNumber"
+                        value={registrationForm.roomNumber}
+                        onChange={(e) => handleInputChange('roomNumber', e.target.value)}
+                        placeholder="101"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="phoneNumber">Phone Number *</Label>
+                      <Input
+                        id="phoneNumber"
+                        value={registrationForm.phoneNumber}
+                        onChange={(e) => handleInputChange('phoneNumber', e.target.value)}
+                        placeholder="9876543210"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="parentPhoneNumber">Parent Phone *</Label>
+                      <Input
+                        id="parentPhoneNumber"
+                        value={registrationForm.parentPhoneNumber}
+                        onChange={(e) => handleInputChange('parentPhoneNumber', e.target.value)}
+                        placeholder="9876543210"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="password">Password (Optional)</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={registrationForm.password}
+                      onChange={(e) => handleInputChange('password', e.target.value)}
+                      placeholder="Leave empty for auto-generated"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      If left empty, password will be: rollNumber@kiet
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsRegisterModalOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit">
+                      Register Student
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+            
+            <Button
+              onClick={handleDownloadPDF}
+              className="flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Download Report
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -480,20 +695,30 @@ const HostelInchargeDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {dashboardData.requests.map((request) => (
-                    <tr key={request.id} className={`border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                      <td className="py-3">{request.studentName}</td>
-                      <td className="py-3">{request.rollNumber}</td>
-                      <td className="py-3">{`${request.hostelBlock} - ${request.roomNumber}`}</td>
-                      <td className="py-3">{`${new Date(request.outingDate).toLocaleDateString()} ${request.outingTime}-${request.returnTime}`}</td>
-                      <td className="py-3">{request.purpose}</td>
+                  {dashboardData.requests?.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-gray-500">
+                        No requests found
+                      </td>
+                    </tr>
+                  ) : (
+                    dashboardData.requests?.filter(Boolean).map((request) => (
+                    <tr key={request?.id || 'unknown'} className={`border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                      <td className="py-3">{request?.studentName || 'N/A'}</td>
+                      <td className="py-3">{request?.rollNumber || 'N/A'}</td>
+                      <td className="py-3">{`${request?.hostelBlock || 'N/A'} - ${request?.roomNumber || 'N/A'}`}</td>
+                      <td className="py-3">{request?.outingDate ? `${new Date(request.outingDate).toLocaleDateString()} ${request?.outingTime || ''}-${request?.returnTime || ''}` : 'N/A'}</td>
+                      <td className="py-3">{request?.purpose || 'N/A'}</td>
                       <td className="py-3">
                         <span className={`px-2 py-1 rounded-full text-xs ${
-                          request.floorInchargeApproval === 'approved' ? 'bg-green-100 text-green-800' :
-                          request.floorInchargeApproval === 'denied' ? 'bg-red-100 text-red-800' :
+                          request?.floorInchargeApproval === 'approved' ? 'bg-green-100 text-green-800' :
+                          request?.floorInchargeApproval === 'denied' ? 'bg-red-100 text-red-800' :
                           'bg-yellow-100 text-yellow-800'
                         }`}>
-                          {request.floorInchargeApproval.charAt(0).toUpperCase() + request.floorInchargeApproval.slice(1)}
+                          {request?.floorInchargeApproval ? 
+                            request.floorInchargeApproval.charAt(0).toUpperCase() + request.floorInchargeApproval.slice(1) :
+                            'Pending'
+                          }
                         </span>
                       </td>
                       <td className="py-3">
@@ -502,12 +727,12 @@ const HostelInchargeDashboard = () => {
                         </span>
                       </td>
                       <td className="py-3 text-right">
-                        {request.currentLevel === 'hostel-incharge' && request.floorInchargeApproval === 'approved' && (
+                        {request?.currentLevel === 'hostel-incharge' && request?.floorInchargeApproval === 'approved' && (
                           <div className="flex gap-2">
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleApprove(request.id)}
+                              onClick={() => handleApprove(request?.id)}
                               className="bg-green-50 hover:bg-green-100 text-green-700"
                             >
                               Approve
@@ -515,7 +740,7 @@ const HostelInchargeDashboard = () => {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleDeny(request.id)}
+                              onClick={() => handleDeny(request?.id)}
                               className="bg-red-50 hover:bg-red-100 text-red-700"
                             >
                               Deny
@@ -524,7 +749,8 @@ const HostelInchargeDashboard = () => {
                         )}
                       </td>
                     </tr>
-                  ))}
+                  ))
+                  )}
                 </tbody>
               </table>
             </div>

@@ -37,6 +37,12 @@ const FloorInchargeDashboard = () => {
   const [approvedStudents, setApprovedStudents] = useState<Student[]>([]);
   const [isApprovedModalOpen, setIsApprovedModalOpen] = useState(false);
 
+  const formatFloorValue = (floor: string | string[] | undefined): string => {
+    if (!floor) return 'N/A';
+    if (Array.isArray(floor)) return floor.join(', ');
+    return String(floor);
+  };
+
   const fetchData = async () => {
     try {
       setRefreshing(true);
@@ -149,7 +155,7 @@ const FloorInchargeDashboard = () => {
   useEffect(() => {
     if (!isAuthenticated || !userDetails?.email) return;
 
-    const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const SOCKET_URL = 'http://localhost:5000';
     console.log('[Socket] Connecting to:', SOCKET_URL);
 
     const socket = io(`${SOCKET_URL}/floor-incharge`, {
@@ -254,7 +260,7 @@ const FloorInchargeDashboard = () => {
     return students.map(student => ({
       name: student.name || 'N/A',
       rollNumber: student.rollNumber || 'N/A',
-      floor: Array.isArray(student.floor) ? student.floor.join(', ') : (student.floor || 'N/A'),
+      floor: formatFloorValue(student.floor),
       roomNumber: student.roomNumber || 'N/A',
       outTime: student.outTime || 'N/A',
       inTime: student.inTime || 'N/A'
@@ -551,7 +557,7 @@ const FloorInchargeDashboard = () => {
                       <tr key={student._id} className={`border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                         <td className="py-3">{student.name || 'N/A'}</td>
                         <td className="py-3">{student.rollNumber || 'N/A'}</td>
-                        <td className="py-3">{student.floor?.join(', ') || 'N/A'}</td>
+                        <td className="py-3">{formatFloorValue(student.floor)}</td>
                         <td className="py-3">{student.roomNumber || 'N/A'}</td>
                         <td className="py-3">{student.email || 'N/A'}</td>
                         <td className="py-3">{student.phoneNumber || 'N/A'}</td>
@@ -594,7 +600,7 @@ const FloorInchargeDashboard = () => {
                 </div>
                 <div>
                   <p className="font-semibold">Floor:</p>
-                  <p>{selectedStudent.floor}</p>
+                  <p>{formatFloorValue(selectedStudent?.floor)}</p>
                 </div>
                 <div>
                   <p className="font-semibold">Room Number:</p>
@@ -676,7 +682,7 @@ const FloorInchargeDashboard = () => {
                     <tr key={student._id} className={`border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                       <td className="py-3">{student.name || 'N/A'}</td>
                       <td className="py-3">{student.rollNumber || 'N/A'}</td>
-                      <td className="py-3">{student.floor || 'N/A'}</td>
+                      <td className="py-3">{formatFloorValue(student.floor)}</td>
                       <td className="py-3">{student.roomNumber || 'N/A'}</td>
                       <td className="py-3">{student.email || 'N/A'}</td>
                       <td className="py-3">{student.phoneNumber || 'N/A'}</td>
@@ -737,7 +743,7 @@ const FloorInchargeDashboard = () => {
                       <td className="py-3">{index + 1}</td>
                       <td className="py-3">{student.name || 'N/A'}</td>
                       <td className="py-3">{student.rollNumber || 'N/A'}</td>
-                      <td className="py-3">{student.floor || 'N/A'}</td>
+                      <td className="py-3">{formatFloorValue(student.floor)}</td>
                       <td className="py-3">{student.roomNumber || 'N/A'}</td>
                       <td className="py-3">{student.outTime || 'N/A'}</td>
                       <td className="py-3">{student.inTime || 'N/A'}</td>
